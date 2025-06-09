@@ -78,21 +78,52 @@
     </div>
 
     <script>
-        // Get references to our HTML elements
         const promptInput = document.getElementById('prompt');
         const generateBtn = document.getElementById('generateBtn');
         const resultDiv = document.getElementById('result');
 
-        // Add an event listener to the button
-        generateBtn.addEventListener('click', () => {
-            // For now, let's just show a test message
+        // IMPORTANT: Replace this with YOUR Cloud Function's URL after successful deployment.
+        // You can find this URL in the Firebase Console under Functions -> Dashboard.
+        // It will look like: https://REGION-PROJECT_ID.cloudfunctions.net/generate_username
+        // Example: https://us-central1-user-name-generator.cloudfunctions.net/generate_username
+        const CLOUD_FUNCTION_URL = 'YOUR_CLOUD_FUNCTION_URL_HERE'; // <<< YOU MUST UPDATE THIS LINE AFTER DEPLOYMENT
+
+        generateBtn.addEventListener('click', async () => {
             const userPrompt = promptInput.value;
-            if (userPrompt.trim() !== "") {
-                resultDiv.textContent = `Generating username for: "${userPrompt}"...`;
-                resultDiv.classList.add('generated'); // Add class for styling
-            } else {
+            if (userPrompt.trim() === "") {
                 resultDiv.textContent = "Please enter a description for your username.";
-                resultDiv.classList.remove('generated'); // Remove class if prompt is empty
+                resultDiv.classList.remove('generated');
+                return;
+            }
+
+            resultDiv.textContent = `Generating username for: "${userPrompt}"...`;
+            resultDiv.classList.add('generated');
+            generateBtn.disabled = true; // Disable button to prevent multiple clicks
+
+            try {
+                const response = await fetch(CLOUD_FUNCTION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt: userPrompt })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                resultDiv.textContent = data.username;
+                resultDiv.classList.add('generated');
+
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.textContent = `Error: ${error.message}. Please try again.`;
+                resultDiv.classList.remove('generated');
+            } finally {
+                generateBtn.disabled = false; // Re-enable button
             }
         });
     </script>

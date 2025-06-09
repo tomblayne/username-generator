@@ -25,7 +25,7 @@ jobs:
       # Deploy Hosting and Functions using Firebase CLI with the deploy token
       - name: Deploy to Firebase Hosting and Functions
         run: firebase deploy --only hosting,functions --project user-name-generator --token "${{ secrets.FIREBASE_DEPLOY_TOKEN }}"
-        # No need for GOOGLE_APPLICATION_CREDENTIALS here, as we are using --token
-
-      # No need for the 'Create Service Account Key File' or 'Clean up' steps
-      # when authenticating with a token.
+        env:
+          # This environment variable will be made available to your Cloud Function (main.py)
+          # Make sure the secret 'GEMINI_API_KEY' is added in your GitHub repository secrets
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
