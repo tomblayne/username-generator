@@ -16,7 +16,7 @@
     "rewrites": [
       {
         "source": "**",
-        "function": "usernameGenerator"
+        "function": "generateUsernames"
       }
     ]
   }
