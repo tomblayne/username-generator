@@ -78,7 +78,23 @@
     </div>
 
     <script>
-        // JavaScript will go here later to handle button clicks and API calls
+        // Get references to our HTML elements
+        const promptInput = document.getElementById('prompt');
+        const generateBtn = document.getElementById('generateBtn');
+        const resultDiv = document.getElementById('result');
+
+        // Add an event listener to the button
+        generateBtn.addEventListener('click', () => {
+            // For now, let's just show a test message
+            const userPrompt = promptInput.value;
+            if (userPrompt.trim() !== "") {
+                resultDiv.textContent = `Generating username for: "${userPrompt}"...`;
+                resultDiv.classList.add('generated'); // Add class for styling
+            } else {
+                resultDiv.textContent = "Please enter a description for your username.";
+                resultDiv.classList.remove('generated'); // Remove class if prompt is empty
+            }
+        });
     </script>
 </body>
 </html>
