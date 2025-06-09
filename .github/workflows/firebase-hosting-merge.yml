@@ -11,10 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "No npm build needed for static HTML."
+      - run: echo "No npm build needed for static HTML." # This line is fine as your frontend is currently static HTML.
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_USER_NAME_GENERATOR }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_USER_NAME_GENERATOR }} # This should match your GitHub Secret name
           channelId: live
           projectId: user-name-generator
+          # *** CRUCIAL CHANGE: ADD THIS ARGS LINE ***
+          args: deploy --only hosting,functions # This tells Firebase to deploy both Hosting and Functions!
