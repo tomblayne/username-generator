@@ -22,21 +22,10 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      # Create service account key file from secret
-      # This creates a temporary file that firebase deploy will use
-      - name: Create Service Account Key File
-        env:
-          SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_USER_NAME_GENERATOR }}
-        run: echo "$SERVICE_ACCOUNT_JSON" > /tmp/gcp-key.json # Use /tmp for best practice
-
-      # Deploy Hosting and Functions using Firebase CLI directly
+      # Deploy Hosting and Functions using Firebase CLI with the deploy token
       - name: Deploy to Firebase Hosting and Functions
-        # This environment variable explicitly tells firebase deploy where to find the service account key
-        run: firebase deploy --only hosting,functions --project user-name-generator
-        env:
-          GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json 
+        run: firebase deploy --only hosting,functions --project user-name-generator --token "${{ secrets.FIREBASE_DEPLOY_TOKEN }}"
+        # No need for GOOGLE_APPLICATION_CREDENTIALS here, as we are using --token
 
-      # Cleanup (optional but good practice)
-      - name: Clean up service account key
-        if: always() # Run this step even if previous steps fail, for security
-        run: rm /tmp/gcp-key.json
+      # No need for the 'Create Service Account Key File' or 'Clean up' steps
+      # when authenticating with a token.
