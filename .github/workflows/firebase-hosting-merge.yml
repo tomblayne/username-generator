@@ -22,6 +22,25 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
+      # --- START Python Setup for Cloud Functions ---
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Ensure this matches your desired Python version for functions
+
+      - name: Install pip
+        run: python -m ensurepip --upgrade
+
+      - name: Create and activate virtual environment
+        run: |
+          cd functions # Navigate into your functions directory
+          python3.11 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+        # 'npm install' for Node.js functions would go here if you had them,
+        # but your functions are Python, so 'pip install' is needed.
+      # --- END Python Setup for Cloud Functions ---
+
       # Deploy Hosting and Functions using Firebase CLI with the deploy token
       - name: Deploy to Firebase Hosting and Functions
         run: firebase deploy --only hosting,functions --project user-name-generator --token "${{ secrets.FIREBASE_DEPLOY_TOKEN }}"
