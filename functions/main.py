@@ -1,34 +1,32 @@
-import os
-import functions_framework
 import google.generativeai as genai
-from flask import jsonify, request
+import os
+from firebase_functions import params
+from firebase_functions.https_fn import on_request
+from firebase_admin import initialize_app
 
-# Configure the Gemini API with the key stored in Firebase Functions config
-# Make sure you have run: firebase functions:config:set gemini.api_key="YOUR_API_KEY"
-try:
-    genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-except Exception as e:
-    print(f"Error configuring Gemini API: {e}")
-    # In a real app, you might want to log this error more formally
-    # or have a fallback
-    pass # Allow the function to still deploy even if API key isn't found during config
+# Constants
+GEMINI_API_KEY_PARAM_NAME = "GEMINI_API_KEY"
+GEMINI_MODEL_NAME = 'gemini-pro'
 
-# Initialize the Gemini model
-# You can choose other models if needed, e.g., 'gemini-pro'
-model = genai.GenerativeModel('gemini-pro')
+# Initialize Firebase Admin SDK if not already initialized
+initialize_app()
 
-@functions_framework.http
+@on_request() # Note the parentheses
 def generate_username(request):
-    """HTTP Cloud Function that generates a username using the Gemini API.
-    Args:
-        request (flask.Request): The request object.
-        <https://flask.palletsprojects.com/en/1.1.x/api/#incoming-request-data>
-    Returns:
-        The response text, or any set of values that can be turned into a
-        Response object using `make_response`
-        <https://flask.palletsprojects.com/en/1.1.x/api/#flask.make_response>.
-    """
-    # Set CORS headers for preflight requests
+    # Accessing the API key using params module
+    # Ensure you set GEMINI_API_KEY_PARAM_NAME as a Firebase Functions environment variable
+    # Example command to set it: firebase functions:secrets:set YOUR_GEMINI_API_KEY_NAME="YOUR_GEMINI_API_KEY"
+    try:
+        api_key = params.String(GEMINI_API_KEY_PARAM_NAME).value
+    except Exception as e:
+        # Handle case where API key is not set, especially during local testing
+        print(f"Warning: {GEMINI_API_KEY_PARAM_NAME} not found as a parameter. Trying environment variable. Error: {e}")
+        api_key = os.environ.get(GEMINI_API_KEY_PARAM_NAME)
+        if not api_key:
+            return ('API key not configured. Please set GEMINI_API_KEY as a Firebase Function parameter or environment variable.', 500, {'Access-Control-Allow-Origin': '*'})
+
+
+    # CORS preflight handling for HTTP requests
     if request.method == 'OPTIONS':
         headers = {
             'Access-Control-Allow-Origin': '*',
@@ -38,43 +36,25 @@ def generate_username(request):
         }
         return ('', 204, headers)
 
-    # Set CORS headers for main request
+    # Actual request handling for GET/POST
     headers = {
         'Access-Control-Allow-Origin': '*'
     }
 
     request_json = request.get_json(silent=True)
-    request_args = request.args
-
-    prompt = ''
     if request_json and 'prompt' in request_json:
         prompt = request_json['prompt']
-    elif request_args and 'prompt' in request_args:
-        prompt = request_args['prompt']
+    else:
+        return ('Please provide a "prompt" in the request body.', 400, headers)
 
-    if not prompt:
-        return jsonify({"error": "No prompt provided"}), 400, headers
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(GEMINI_MODEL_NAME)
 
     try:
-        # Construct the full prompt for the AI
-        full_prompt = f"Generate a creative and unique username (single word or hyphenated, no spaces) based on the following description: '{prompt}'. Provide only the username, no extra text or explanations."
-
-        # Generate content using the Gemini model
-        response = model.generate_content(full_prompt)
-
-        # Extract the generated text
-        generated_username = response.text.strip()
-
-        # Clean up the username if it contains unwanted characters or phrases from the AI
-        # This is important as AI can sometimes add unwanted intros/outros
-        # Example cleaning:
-        generated_username = generated_username.replace("\"", "").replace("'", "").replace("Generated Username: ", "").replace("Here's a username: ", "").split('\n')[0].strip()
-
-        # If the username contains spaces, replace them with hyphens, and ensure it's a single "word"
-        generated_username = generated_username.replace(" ", "-")
-
-        return jsonify({"username": generated_username}), 200, headers
-
+        response = model.generate_content(prompt)
+        # Assuming response.text is the content you want to return
+        return (response.text, 200, headers)
     except Exception as e:
-        print(f"Error calling Gemini API: {e}")
-        return jsonify({"error": "Failed to generate username", "details": str(e)}), 500, headers
+        # Log the full exception for debugging
+        print(f"Error generating content: {e}")
+        return (f"Error generating content: {e}", 500, headers)
