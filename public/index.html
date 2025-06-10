@@ -82,11 +82,8 @@
         const generateBtn = document.getElementById('generateBtn');
         const resultDiv = document.getElementById('result');
 
-        // IMPORTANT: Replace this with YOUR Cloud Function's URL after successful deployment.
-        // You can find this URL in the Firebase Console under Functions -> Dashboard.
-        // It will look like: https://REGION-PROJECT_ID.cloudfunctions.net/generate_username
-        // Example: https://us-central1-user-name-generator.cloudfunctions.net/generate_username
-        const CLOUD_FUNCTION_URL = 'YOUR_CLOUD_FUNCTION_URL_HERE'; // <<< YOU MUST UPDATE THIS LINE AFTER DEPLOYMENT
+        // IMPORTANT: This is YOUR Cloud Function's URL from your last successful deployment.
+        const CLOUD_FUNCTION_URL = 'https://generate-username-k4ejprggqq-uc.a.run.app'; // <<< UPDATED THIS LINE
 
         generateBtn.addEventListener('click', async () => {
             const userPrompt = promptInput.value;
@@ -110,12 +107,20 @@
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    // Try to parse JSON error first, fallback to text if not JSON
+                    let errorDetails = `HTTP error! status: ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorDetails = errorData.error || JSON.stringify(errorData);
+                    } catch {
+                        errorDetails = await response.text();
+                    }
+                    throw new Error(errorDetails);
                 }
 
-                const data = await response.json();
-                resultDiv.textContent = data.username;
+                // >>> IMPORTANT CHANGE HERE: Expect text response, not JSON
+                const generatedUsername = await response.text(); 
+                resultDiv.textContent = generatedUsername.trim(); // Display the text directly
                 resultDiv.classList.add('generated');
 
             } catch (error) {
