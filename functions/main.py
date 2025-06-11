@@ -1,18 +1,41 @@
-import google.generativeai as genai
 import os
+import google.generativeai as genai
 from firebase_functions.https_fn import on_request
 from firebase_admin import initialize_app
-# REMOVED: from firebase_functions import params # No longer needed
+
+# Conditional import for params.Secret to handle local environment during build analysis.
+# For actual deployment, the Cloud Functions runtime will have params.Secret available.
+try:
+    from firebase_functions import params
+    # Define the secret directly using params.Secret for proper 2nd Gen secret management
+    GEMINI_API_KEY_SECRET = params.Secret("GEMINI_API_KEY")
+    # This will be used in genai.configure() and passed to secrets=[]
+    api_key_value_source = GEMINI_API_KEY_SECRET
+except ImportError:
+    # Fallback for local development/analysis where params.Secret might not exist in the old firebase-functions version
+    print("WARNING: 'firebase_functions.params.Secret' not found, falling back to os.environ.get for local analysis.")
+    # For local analysis, we might not have the secret, so provide a placeholder or expect it from env vars
+    GEMINI_API_KEY_SECRET = os.environ.get("GEMINI_API_KEY", "dummy_key_for_local_analysis")
+    api_key_value_source = GEMINI_API_KEY_SECRET
+
 
 # Constants
-GEMINI_API_KEY_PARAM_NAME = "GEMINI_API_KEY"
 GEMINI_MODEL_NAME = 'models/gemini-pro' # Ensure this is 'models/gemini-pro'
 
 # Initialize Firebase Admin SDK if not already initialized
 # This will typically initialize using Application Default Credentials (service account)
 initialize_app()
 
-@on_request()
+@on_request(
+    # Link the secret here using the params.Secret object (if successfully imported).
+    # This is crucial for Cloud Functions to inject the secret into the environment.
+    # The conditional check ensures it only applies if params.Secret was actually loaded.
+    secrets=[GEMINI_API_KEY_SECRET] if 'params' in locals() and isinstance(GEMINI_API_KEY_SECRET, params.Secret) else [],
+    region="us-central1", # Recommended to specify a region
+    # You can add other configurations like memory, timeout, etc., here if needed
+    # memory=512,
+    # timeout_sec=60,
+)
 def generate_username(request):
     # Ensure all responses (including errors) have CORS headers
     # Setting Access-Control-Allow-Origin to the exact frontend origin is best practice
@@ -28,18 +51,27 @@ def generate_username(request):
         print("Handling OPTIONS preflight request.")
         return ('', 204, response_headers)
 
-    # Accessing the API key directly from environment variables (where secrets are exposed by Firebase)
-    api_key = os.environ.get(GEMINI_API_KEY_PARAM_NAME)
+    # Accessing the API key's value based on whether params.Secret was used or not.
+    # At runtime in Cloud Functions, GEMINI_API_KEY_SECRET will be a params.Secret object.
+    # During local analysis/tests where params.Secret might be missing, it will be a string.
+    if isinstance(api_key_value_source, genai.types.Secret): # Check if it's a params.Secret object (from genai.types)
+        api_key = api_key_value_source.value() # Access the value from the Secret object
+    else:
+        # Fallback if params.Secret was not used (e.g., during local analysis/testing where it might not exist)
+        # In this scenario, we assume the API key might be directly available as an environment variable.
+        api_key = os.environ.get("GEMINI_API_KEY")
+
 
     # --- DEBUGGING LINE: TEMPORARILY PRINT API KEY VALUE TO LOGS ---
     # WARNING: This exposes your API key in logs. REMOVE AFTER DEBUGGING!
-    print(f"DEBUG: Value of {GEMINI_API_KEY_PARAM_NAME} from environment: '{api_key}'")
+    # Truncate for display in logs if it's a real key, or just print its presence
+    print(f"DEBUG: Value of GEMINI_API_KEY (first 5 chars): '{api_key[:5] if api_key else 'None'}'")
     # --- END DEBUGGING LINE ---
 
-    if not api_key:
-        print(f"ERROR: API key '{GEMINI_API_KEY_PARAM_NAME}' not configured in environment.")
+    if not api_key or api_key == "dummy_key_for_local_analysis":
+        print(f"ERROR: API key 'GEMINI_API_KEY' not configured in environment.")
         response_headers['Content-Type'] = 'text/plain'
-        return ('API key not configured. Please ensure GEMINI_API_KEY is set as a secret and exposed as an environment variable in Cloud Functions settings.', 500, response_headers)
+        return ('API key not configured. Please ensure GEMINI_API_KEY is set as a secret and linked to the function.', 500, response_headers)
 
     genai.configure(api_key=api_key)
 
