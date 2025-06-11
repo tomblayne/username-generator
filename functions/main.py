@@ -1,12 +1,11 @@
 import google.generativeai as genai
 import os
-# from firebase_functions import params # REMOVE THIS IMPORT
 from firebase_functions.https_fn import on_request
 from firebase_admin import initialize_app
 
 # Constants
 GEMINI_API_KEY_PARAM_NAME = "GEMINI_API_KEY"
-GEMINI_MODEL_NAME = 'gemini-pro'
+GEMINI_MODEL_NAME = 'models/gemini-pro' # Keep this for now
 
 # Initialize Firebase Admin SDK if not already initialized
 initialize_app()
@@ -15,50 +14,107 @@ initialize_app()
 def generate_username(request):
     # Ensure all responses (including errors) have CORS headers
     response_headers = {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': 'https://user-name-generator.web.app', # Use your specific frontend URL here
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Access-Control-Max-Age': '3600'
     }
 
-    # Accessing the API key directly from environment variables (where secrets are exposed)
-    # This replaces the entire 'try-except' block for params.String
-    api_key = os.environ.get(GEMINI_API_KEY_PARAM_NAME) # This is the correct way
-    if not api_key:
-        return ('API key not configured. Please ensure GEMINI_API_KEY is set as a secret and exposed as an environment variable.', 500, response_headers)
-
     # CORS preflight handling for HTTP requests
     if request.method == 'OPTIONS':
+        print("Handling OPTIONS preflight request.")
         return ('', 204, response_headers)
 
-    # Actual request handling for GET/POST
+    # Accessing the API key directly from environment variables (where secrets are exposed)
+    api_key = os.environ.get(GEMINI_API_KEY_PARAM_NAME)
+    if not api_key:
+        # This error should no longer appear if API key is correctly configured
+        print(f"ERROR: API key '{GEMINI_API_KEY_PARAM_NAME}' not configured.")
+        response_headers['Content-Type'] = 'text/plain'
+        return ('API key not configured. Please ensure GEMINI_API_KEY is set as a secret and exposed as an environment variable.', 500, response_headers)
+
+    genai.configure(api_key=api_key)
+
+    # --- NEW LOGGING FOR MODEL AVAILABILITY ---
+    try:
+        print("Attempting to list available Gemini models...")
+        available_models = [m.name for m in genai.list_models()]
+        print(f"Successfully listed models. Total: {len(available_models)}")
+        print(f"Available models: {available_models}")
+        if GEMINI_MODEL_NAME in available_models:
+            print(f"'{GEMINI_MODEL_NAME}' IS present in the list of available models.")
+        else:
+            print(f"'{GEMINI_MODEL_NAME}' IS NOT present in the list of available models.")
+
+        # Also check if 'gemini-pro' (without 'models/') is available
+        if 'gemini-pro' in available_models:
+             print("'gemini-pro' (without 'models/') IS present in the list of available models.")
+        else:
+             print("'gemini-pro' (without 'models/') IS NOT present in the list of available models.")
+
+
+    except Exception as e:
+        print(f"ERROR listing models: {e}")
+        # Continue execution to try the main function logic, as list_models might fail for different reasons
+    # --- END NEW LOGGING ---
+
     if request.method == 'POST':
-        request_json = request.get_json(silent=True)
-        if not request_json or 'prompt' not in request_json:
-            return ('Please provide a "prompt" in the request body.', 400, response_headers)
-
-        prompt = request_json['prompt']
-
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(GEMINI_MODEL_NAME)
-
         try:
-            full_gemini_prompt = f"Generate 1 unique and creative username based on these keywords/themes: '{prompt}'. Keep it concise, single word if possible, and suitable for online use. Return only the username, no extra text, numbering, or explanations."
-            
+            print(f"Received POST request. Content-Type: {request.headers.get('Content-Type')}")
+            request_json = request.get_json(silent=True)
+            print(f"Parsed JSON from request: {request_json}")
+
+            if not request_json or 'prompt' not in request_json:
+                print("ERROR: No 'prompt' key found in request JSON or JSON is invalid.")
+                response_headers['Content-Type'] = 'text/plain'
+                return ('Please provide a "prompt" in the request body.', 400, response_headers)
+
+            prompt = str(request_json['prompt']).strip()
+            print(f"Extracted and stripped prompt: '{prompt}' (Type: {type(prompt)})")
+
+            if not prompt:
+                print("ERROR: Extracted prompt is empty after stripping.")
+                response_headers['Content-Type'] = 'text/plain'
+                return ('Error: Prompt is empty. Please provide valid content.', 400, response_headers)
+
+            # This line will now be attempted *after* listing models
+            model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+            print(f"Attempting to use Gemini Model: {GEMINI_MODEL_NAME}")
+
+            full_gemini_prompt = (
+                f"Generate 1 unique and creative username based on these keywords/themes: '{prompt}'. "
+                "Keep it concise, single word if possible, and suitable for online use. "
+                "Return only the username, no extra text, numbering, or explanations."
+            )
+            print(f"Sending prompt to Gemini API: '{full_gemini_prompt}'")
+
             response = model.generate_content(full_gemini_prompt)
-            
+
+            print(f"Received response from Gemini API: {response}")
+            if response.text:
+                print(f"Gemini response.text: '{response.text}'")
+            else:
+                print("WARNING: Gemini response.text is empty or not available.")
+
             generated_username = response.text.strip()
-            
+            print(f"Generated username after stripping: '{generated_username}'")
+
             if generated_username:
-                response_headers['Content-Type'] = 'text/plain' 
+                response_headers['Content-Type'] = 'text/plain'
                 return (generated_username, 200, response_headers)
             else:
+                print("ERROR: No username could be extracted from Gemini response text.")
+                response_headers['Content-Type'] = 'text/plain'
                 return ("No username could be generated for the given prompt. Please try a different one.", 500, response_headers)
 
         except Exception as e:
-            print(f"Error generating content: {e}")
+            import traceback
+            print(f"UNCAUGHT EXCEPTION IN POST handler: {e}")
+            print(traceback.format_exc())
             response_headers['Content-Type'] = 'text/plain'
-            return (f"Error generating content: {e}. Please check your Firebase Function logs.", 500, response_headers)
+            return (f"An unexpected error occurred in the function: {e}. Please check Cloud Function logs for details.", 500, response_headers)
+
     else:
+        print(f"Received unsupported HTTP method: {request.method}")
         response_headers['Content-Type'] = 'text/plain'
         return ("Method Not Allowed", 405, response_headers)
