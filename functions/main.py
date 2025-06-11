@@ -117,3 +117,4 @@ def generate_username(request):
         print(f"Received unsupported HTTP method: {request.method}")
         response_headers['Content-Type'] = 'text/plain'
         return ("Method Not Allowed", 405, response_headers)
+    
